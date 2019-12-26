@@ -7,34 +7,60 @@ import numpy as np # linear algebra
 import pandas as pd # data processing, CSV file I/O (e.g. pd.read_csv)
 pd.set_option('max_columns', 150)
 
-import random, math, psutil, pickle
 
 class Dataset(Dataset):
     def __init__(self, root = './Data', charge_train=True, charge_test=False):
-        train_df = pd.read_csv(os.path.join(root,'train.csv'))
-        train_df["timestamp"] = pd.to_datetime(train_df["timestamp"], format='%Y-%m-%d %H:%M:%S')
-        print('Charged')
-        #self.dirs = self.get_all_files(original_dir=os.path.join(root_dir))
 
+        building_meta_df = pd.read_csv(os.path.join(root, 'building_metadata.csv'))
+        building_meta_df['primary_use'] = np.unique(building_meta_df.to_numpy()[:, 2], return_inverse=True)[1]
+        self.building_meta_df = building_meta_df.to_numpy().astype(np.float32)
 
-    def get_all_files(self, original_dir, cum_dir='', key_word_to_introduce=[''], key_word_to_discard=['####']):
-        files = []
-        for actual in os.listdir(os.path.join(original_dir, cum_dir)):
-            path = os.path.join(original_dir, cum_dir, actual)
-            if os.path.isfile(path):
-                    file_dir = os.path.join(cum_dir, actual)
-                    has_key = len([k for k in key_word_to_introduce if k in file_dir]) == len(key_word_to_introduce)
-                    discardable = len([k for k in key_word_to_discard if k in file_dir])>0
-                    if has_key and not discardable:
-                        files.extend([file_dir[:file_dir.rfind('.')]])
-            else:
-                files.extend(self.get_all_files(original_dir=original_dir, cum_dir=os.path.join(cum_dir, actual),
-                                                key_word_to_introduce=key_word_to_introduce,
-                                                key_word_to_discard=key_word_to_discard))
-        return files
+        if charge_train:
+            train_df = pd.read_csv(os.path.join(root,'train.csv'))
+            train_df["timestamp"] = pd.to_datetime(train_df["timestamp"])
+            train_df['day'] = (((train_df['timestamp'] - train_df['timestamp'].min()) / np.timedelta64(1, 'D')) % 365)
+            train_df['hour'] = (((train_df['timestamp'] - train_df['timestamp'].min()) / np.timedelta64(1, 'h')) % 24)
+            del train_df['timestamp']
+
+            weather_train_df = pd.read_csv(os.path.join(root, 'weather_train.csv'))
+            weather_train_df["timestamp"] = pd.to_datetime(weather_train_df["timestamp"])
+            weather_train_df['day'] = (((weather_train_df['timestamp'] - weather_train_df['timestamp'].min()) / np.timedelta64(1, 'D'))%365)
+            weather_train_df['hour'] = (((weather_train_df['timestamp'] - weather_train_df['timestamp'].min()) / np.timedelta64(1, 'h'))%24)
+            del weather_train_df['timestamp']
+
+            self.train_df = train_df.to_numpy().astype(np.float32)
+            self.weather_train_df = weather_train_df.to_numpy().astype(np.float32)
+            self.train_charged = True
+
+        if charge_test:
+            test_df = pd.read_csv(os.path.join(root, 'test.csv'))
+            test_df["timestamp"] = pd.to_datetime(train_df["timestamp"])
+            test_df['day'] = (((test_df['timestamp'] - test_df['timestamp'].min()) / np.timedelta64(1, 'D')) % 365)
+            test_df['hour'] = (((test_df['timestamp'] - test_df['timestamp'].min()) / np.timedelta64(1, 'h')) % 24)
+            del test_df['timestamp']
+
+            weather_test_df = pd.read_csv(os.path.join(root, 'weather_test.csv'))
+            weather_test_df["timestamp"] = pd.to_datetime(weather_train_df["timestamp"])
+            weather_test_df['day'] = (((weather_test_df['timestamp'] - weather_test_df['timestamp'].min()) / np.timedelta64(1, 'D')) % 365)
+            weather_test_df['hour'] = (((weather_test_df['timestamp'] - weather_test_df['timestamp'].min()) / np.timedelta64(1, 'h')) % 24)
+            del weather_test_df['timestamp']
+
+            self.test_df = test_df.to_numpy().astype(np.float32)
+            self.weather_test_df = weather_test_df.to_numpy().astype(np.float32)
+            self.test_charged = True
+
+        #Change Train or Test for charge one dataset or another
+        self.charge = 'Train'
+
+        to_print = 'Charged'
+        if self.train_charged:
+            to_print += ' Train Set '
+        if self.test_charged:
+            to_print += ' Test Set '
+        print(to_print)
 
     def __len__(self):
-        return len(self.dirs)
+        return len(self.train_df) if self.charge.lower() == 'train' else len(self.test_df)
 
 
     def __getitem__(self, idx):
