@@ -24,7 +24,7 @@ WEATHER_KEYS_IDX = [0, 8, 9]
 WEATHER_VALUES_IDX = [1, 2, 3, 4, 5, 6, 7]
 
 BUILDING_DATA_COLS_TO_STANDARIZE = ['square_feet', 'year_built', 'floor_count']
-WEATHER_COLS_TO_STANDARIZE = ['air_temperature', 'cloud_coverage', 'dew_temperature', 'precip_depth',
+WEATHER_COLS_TO_STANDARIZE = ['air_temperature', 'cloud_coverage', 'dew_temperature', 'precip_depth_1_hr',
                               'sea_level_pressure', 'wind_direction', 'wind_speed']
 
 class Dataset(Dataset):
@@ -32,9 +32,10 @@ class Dataset(Dataset):
 
         building_meta_df = pd.read_csv(os.path.join(root, 'building_metadata.csv'))
         building_meta_df['primary_use'] = np.unique(building_meta_df.to_numpy()[:, 2], return_inverse=True)[1]
+        idx = [building_meta_df.columns.get_loc(col) for col in BUILDING_DATA_COLS_TO_STANDARIZE]
         self.building_meta_df = building_meta_df.to_numpy().astype(np.float32)
         self.building_meta_df = transform_nans(data=self.building_meta_df)
-
+        self.building_meta_df = standarize(data=self.building_meta_df, idx=idx)
         if charge_train:
             train_df = pd.read_csv(os.path.join(root,'train.csv'))
             # We save the time as day and hour in separated fields, because hour and season are better descriptors
@@ -49,9 +50,11 @@ class Dataset(Dataset):
             weather_train_df['day'] = np.round((((weather_train_df['timestamp'] - weather_train_df['timestamp'].min()) / np.timedelta64(1, 'D'))%365),0)
             weather_train_df['hour'] = np.round((((weather_train_df['timestamp'] - weather_train_df['timestamp'].min()) / np.timedelta64(1, 'h'))%24),0)
             del weather_train_df['timestamp']
+            idx = [weather_train_df.columns.get_loc(col) for col in WEATHER_COLS_TO_STANDARIZE]
             #Prepare weather data
             weather_train_df = weather_train_df.to_numpy()
             weather_train_df = transform_nans(data=weather_train_df)
+            weather_train_df, weather_train_mean, weather_train_std = standarize(weather_train_df, idx=idx, return_mean_and_std=True)
             self.weather_train_df = {tuple(key) : value for key, value in zip(weather_train_df[:, WEATHER_KEYS_IDX].astype(np.int), weather_train_df[:, WEATHER_VALUES_IDX])}
             #Prepare df data
             self.train_df = train_df.to_numpy().astype(np.float32)
@@ -73,8 +76,10 @@ class Dataset(Dataset):
             weather_test_df['hour'] = np.round((((weather_test_df['timestamp'] - weather_test_df['timestamp'].min()) / np.timedelta64(1, 'h')) % 24),0)
             del weather_test_df['timestamp']
             # Prepare weather data
+            idx = [weather_test_df.columns.get_loc(col) for col in WEATHER_COLS_TO_STANDARIZE]
             weather_test_df = weather_test_df.to_numpy()
             weather_test_df = transform_nans(data=weather_test_df)
+            weather_test_df = standarize(weather_test_df, idx=idx, mean=weather_train_mean, std=weather_train_std)
             self.weather_test_df = {tuple(key) : value for key, value in zip(weather_test_df[:, WEATHER_KEYS_IDX].astype(np.int), weather_test_df[:, WEATHER_VALUES_IDX])}
             # Prepare df data
             self.test_df = transform_nans(data=self.test_df)
@@ -127,8 +132,16 @@ def construct_x(df_data, building_data, weather_data):
     x[DF_DATA_LEN+BUILDING_DATA_LEN:] = weather_data
     return x
 
-def standarize(data, idx, mean=None, std=None):
-    print('DO IT')
+def standarize(data, idx, mean=None, std=None, return_mean_and_std=False):
+    if mean is None:
+        mean = np.mean(data[...,idx],axis=0)
+    if std is None:
+        std = np.std(data[...,idx],axis=0)
+    data[...,idx] = (data[...,idx]-mean)/std
+    if not return_mean_and_std:
+        return data
+    else:
+        return data, mean, std
 
 def transform_nans(data, operation='mean'):
     for i in range(data.shape[-1]):
