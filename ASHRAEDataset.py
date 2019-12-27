@@ -27,7 +27,7 @@ BUILDING_DATA_COLS_TO_STANDARIZE = ['square_feet', 'year_built', 'floor_count']
 WEATHER_COLS_TO_STANDARIZE = ['air_temperature', 'cloud_coverage', 'dew_temperature', 'precip_depth_1_hr',
                               'sea_level_pressure', 'wind_direction', 'wind_speed']
 
-class Dataset(Dataset):
+class ASHRAEDataset(Dataset):
     def __init__(self, root = './Data', charge_train=True, charge_test=False, normalize=True):
 
         building_meta_df = pd.read_csv(os.path.join(root, 'building_metadata.csv'))
@@ -112,10 +112,12 @@ class Dataset(Dataset):
         df_data = df[idx]
         building_data = building_meta[int(df_data[0])]
         weather_keys = tuple(np.round([int(building_data[0]), int(df_data[-2]), int(df_data[-1])],3))
+        if weather_keys not in weather:
+            weather_keys = get_nearest_day_info(weather_keys, weather)
         weather_data = weather[weather_keys]
         x = construct_x(df_data, building_data, weather_data)
         y = df_data[Y_IDX]
-        return (x,y)
+        return(x,y)
 
 def construct_x(df_data, building_data, weather_data):
     x = np.zeros(shape=INPUT_LEN, dtype=np.float32)
@@ -150,3 +152,9 @@ def transform_nans(data, operation='mean'):
         elif operation.lower() == 'median':
             data[np.isnan(data[..., i]), i] = np.nanmedian(data[..., i])
     return data
+
+def get_nearest_day_info(key, data):
+    site_id, day, hour = key
+    while(not (site_id, day, hour) in data):
+        day = (day+1)%365
+    return (site_id, day, hour)
