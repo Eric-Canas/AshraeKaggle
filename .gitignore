@@ -6,3 +6,5 @@ Data/sample_submission.csv
 Data/building_metadata.csv
 runs/
 *.pyc
+Models/
+Submisions/

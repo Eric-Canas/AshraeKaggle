@@ -55,23 +55,27 @@ class ASHRAEDataset(Dataset):
             weather_train_df = weather_train_df.to_numpy()
             weather_train_df = transform_nans(data=weather_train_df)
             weather_train_df, weather_train_mean, weather_train_std = standarize(weather_train_df, idx=idx, return_mean_and_std=True)
-            self.weather_train_df = {tuple(key) : value for key, value in zip(weather_train_df[:, WEATHER_KEYS_IDX].astype(np.int), weather_train_df[:, WEATHER_VALUES_IDX])}
-            #Prepare df data
-            self.train_df = train_df.to_numpy().astype(np.float32)
-            self.train_df = transform_nans(data=self.train_df)
+            if not charge_test:
+                self.weather_train_df = {tuple(key) : value for key, value in zip(weather_train_df[:, WEATHER_KEYS_IDX].astype(np.int), weather_train_df[:, WEATHER_VALUES_IDX])}
+                #Prepare df data
+                self.train_df = train_df.to_numpy().astype(np.float32)
+                self.train_df = transform_nans(data=self.train_df)
 
-            self.train_charged = True
-
+                self.train_charged = True
+            else:
+                del weather_train_df
+                del train_df
+                self.train_charged = False
         if charge_test:
             test_df = pd.read_csv(os.path.join(root, 'test.csv'))
             # We save the time as day and hour in separated fields, because hour and season are better descriptors
-            test_df["timestamp"] = pd.to_datetime(train_df["timestamp"])
+            test_df["timestamp"] = pd.to_datetime(test_df["timestamp"])
             test_df['day'] = np.round((((test_df['timestamp'] - test_df['timestamp'].min()) / np.timedelta64(1, 'D')) % 365),0)
             test_df['hour'] = np.round((((test_df['timestamp'] - test_df['timestamp'].min()) / np.timedelta64(1, 'h')) % 24),0)
             del test_df['timestamp']
             # We save the time as day and hour in separated fields, because hour and season are better descriptors
             weather_test_df = pd.read_csv(os.path.join(root, 'weather_test.csv'))
-            weather_test_df["timestamp"] = pd.to_datetime(weather_train_df["timestamp"])
+            weather_test_df["timestamp"] = pd.to_datetime(weather_test_df["timestamp"])
             weather_test_df['day'] = np.round((((weather_test_df['timestamp'] - weather_test_df['timestamp'].min()) / np.timedelta64(1, 'D')) % 365),0)
             weather_test_df['hour'] = np.round((((weather_test_df['timestamp'] - weather_test_df['timestamp'].min()) / np.timedelta64(1, 'h')) % 24),0)
             del weather_test_df['timestamp']
@@ -82,8 +86,8 @@ class ASHRAEDataset(Dataset):
             weather_test_df = standarize(weather_test_df, idx=idx, mean=weather_train_mean, std=weather_train_std)
             self.weather_test_df = {tuple(key) : value for key, value in zip(weather_test_df[:, WEATHER_KEYS_IDX].astype(np.int), weather_test_df[:, WEATHER_VALUES_IDX])}
             # Prepare df data
-            self.test_df = transform_nans(data=self.test_df)
             self.test_df = test_df.to_numpy().astype(np.float32)
+            self.test_df = transform_nans(data=self.test_df)
 
             self.test_charged = True
 
@@ -104,20 +108,24 @@ class ASHRAEDataset(Dataset):
     def __getitem__(self, idx):
         building_meta = self.building_meta_df
         if self.charge.lower() == 'train':
-            df = self.train_df
             weather = self.weather_train_df
+            df_data = self.train_df[idx]
         else:
-            df = self.test_df
             weather = self.weather_test_df
-        df_data = df[idx]
+            df_data = self.test_df[idx]
+            #Reestructured in the same way than the training data
+            df_data[0], df_data[1], df_data[2] = df_data[1], df_data[2], df_data[0]
+
         building_data = building_meta[int(df_data[0])]
-        weather_keys = tuple(np.round([int(building_data[0]), int(df_data[-2]), int(df_data[-1])],3))
+        weather_keys = tuple(np.round([int(building_data[0]), int(df_data[-2]), int(df_data[-1])], 3))
         if weather_keys not in weather:
             weather_keys = get_nearest_day_info(weather_keys, weather)
         weather_data = weather[weather_keys]
         x = construct_x(df_data, building_data, weather_data)
+        #In case of test Y will mean the id for the CSV
         y = df_data[Y_IDX]
-        return(x,y)
+        return (x, y)
+
 
 def construct_x(df_data, building_data, weather_data):
     x = np.zeros(shape=INPUT_LEN, dtype=np.float32)

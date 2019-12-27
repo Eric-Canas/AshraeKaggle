@@ -9,5 +9,5 @@ class OneLayerRegressor(nn.Module):
 
     def forward(self, x):
         x = F.relu(self.hidden1(x))  # activation function for hidden layer
-        x = self.output(x)  # linear output
+        x = F.relu(self.output(x))  # linear output
         return x

@@ -1,3 +1,4 @@
-from Train import train
+from Train import train, produce_test_output
 if __name__ == '__main__':
-    train(file_name='FileNaimu2')
+    produce_test_output(model_to_charge='SimpleLinearPerceptron.pth')
+    #train(file_name='FileNaimu2')

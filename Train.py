@@ -66,8 +66,29 @@ def validation_step(model, data, epoch, criterion, device = 'cuda:0', writer=Non
         writer.add_scalar('Validation-Pearson', mean_pearson, epoch)
     print('VALIDATION -> EPOCH {0}, MEAN LOSS {1}, STD LOSS {2}, MEAN PEARSON {3}'.format(epoch, mean_loss, np.std(np.array(losses)), mean_pearson))
 
+def get_predictions(model, data, batch_size, device = 'cuda:0', verbose=True, verbose_each=200):
+    model.eval()
+    datalen = len(data)
+    batch_time = time.time()
+    output_tensor = torch.zeros((len(data.dataset)),device=device)
+    #output_tensor[:,0] = torch.arange(0,len(data.dataset),device=device)
+    with torch.no_grad():
+        for i, (x,_) in enumerate(data):
+            x = x.to(device)
+            output = model(x)[...,0]
+            output_tensor[i * batch_size:(i + 1) * batch_size] = output
+            if verbose and i % verbose_each == 0:
+                this_batch_time = time.time() - batch_time
+                percent_done = i / datalen
+                remaining_time = (this_batch_time * (datalen / verbose_each)) * (1 - percent_done)
+                batch_time = time.time()
+                print('Producing Output -> Batch {0}/{1} ({2}%) --> Remaining Time: {3}:{4}'.
+                      format(i, datalen, int((percent_done) * 100),
+                             int(remaining_time / 60), int(remaining_time) % 60))
+    return output_tensor.detach().cpu().numpy()
+
 def train(lr=0.5,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileName',
-                 charge=None, save = True, batch_size = 20000, epochs_for_saving=20):
+                 charge=None, save = True, batch_size = 20000, epochs_for_saving=5):
 
     #Stablishing the device
     device = 'cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu'
@@ -76,6 +97,8 @@ def train(lr=0.5,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileNa
 
     #Generating the model
     model = models.OneLayerRegressor()
+    if charge is not None:
+        model = load_model(model=model,file_name=file_name)
     model = model.to(device)
 
     #Training Parameters
@@ -103,7 +126,39 @@ def train(lr=0.5,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileNa
                    writer=writer, verbose=True)
         validation_step(model=model, data=validation, criterion=criterion, epoch=i, device=device, writer=writer)
         if save and i%epochs_for_saving==0:
+            writer.flush()
             model = model.cpu()
             save_model(model=model,file_name=file_name)
             model = model.to(device)
     writer.close()
+
+def produce_test_output(model_to_charge, gpu = 0, batch_size=20000):
+    # Stablishing the device
+    device = 'cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu'
+    if device == 'cpu':
+        warnings.warn(message="Executing on CPU!", category=ResourceWarning)
+
+    # Charging the model
+    model = models.OneLayerRegressor()
+    model = load_model(model=model, file_name=model_to_charge)
+    model = model.to(device)
+
+    # Generating the Dataset
+    dataset = ASHRAEDataset(charge_train=True, charge_test=True)
+    dataset.charge = 'Test'
+    # Pass to Dataloader for reading batches
+    dataset = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1, pin_memory=True)
+
+    # Writer for plotting graphic in tensorboard
+    print('Starting the prediction...')
+    print("Batch Size: " + str(batch_size))
+    print("Running in: " + device)
+
+    predictions_without_id = get_predictions(model=model,data=dataset, batch_size=batch_size, device=device)
+    predictions = np.zeros(shape=(len(predictions_without_id),2), dtype=np.float64)
+    predictions[...,0] = np.arange(0,len(predictions), dtype=np.float64)
+    predictions[...,1] = predictions_without_id
+
+    np.savetxt('./Submisions/submision_'+model_to_charge[:-len('.pth')]+'.csv',predictions,delimiter=',',
+               fmt=['%u','%1.4f'],header='row_id, meter_reading')
+
