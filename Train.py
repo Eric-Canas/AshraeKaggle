@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader
 import time
 import os
 
-def train_step(model, data, epoch, criterion, optimizer, device = 'cuda:0', verbose = False, writer=None, verbose_each=2000):
+def train_step(model, data, epoch, criterion, optimizer, device = 'cuda:0', verbose = False, writer=None, verbose_each=20000):
     model.train()
     losses = []
     pearsons = []
@@ -34,9 +34,9 @@ def train_step(model, data, epoch, criterion, optimizer, device = 'cuda:0', verb
             this_batch_time = time.time()-batch_time
             percent_done = i/datalen
             remaining_time = (this_batch_time*(datalen/verbose_each))*(1-percent_done)
-            sample_id = np.random.randint(0, 30)
-            sample_id_2 = np.random.randint(30, 60)
-            sample_id_3 = np.random.randint(60, 90)
+            sample_id = np.random.randint(0, 2)
+            sample_id_2 = np.random.randint(4, 8)
+            sample_id_3 = np.random.randint(2, 4)
             print('Train -> Batch {0}/{1} ({2}%) of epoch {3}. Loss: {4}, Pearson: {5}, STD: {6}, Samples: {7}/{8} - {9}/{10} - {11}/{12} --> Remaining Time: {13}:{14}'.
                   format(i,datalen, int((percent_done)*100), epoch, np.round(loss.item(),3), np.round(pearson,3),
                          np.round(torch.std(output).item(),2), np.round(output[sample_id].item(),2),
@@ -96,7 +96,7 @@ def get_predictions(model, data, batch_size, device = 'cuda:0', verbose=True, ve
     return output_tensor.detach().cpu().numpy()
 
 def train(lr=0.01,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileName',
-                 charge=None, save = True, batch_size = 128, epochs_for_saving=1):
+                 charge=None, save = True, batch_size = 32, epochs_for_saving=3):
 
     #Stablishing the device
     device = 'cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu'
@@ -105,7 +105,7 @@ def train(lr=0.01,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileN
 
     #Generating the model
     #model = models.OneLayerRegressor()
-    model = models.FourLayerSigmoidRegressor()
+    model = models.TwoLayerSigmoidRegressor()
     if charge is not None:
         model = load_model(model=model,file_name=charge)
     model = model.to(device)

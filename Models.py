@@ -156,3 +156,17 @@ class ThreeLayerSigmoidRegressor(nn.Module):
         x = torch.sigmoid(self.hidden3(x))
         x = F.relu(self.output(x))  # linear output
         return x
+
+class TwoLayerSigmoidRegressor(nn.Module):
+    def __init__(self, input_size=INPUT_LEN,
+                 hidden_size=(INPUT_LEN, INPUT_LEN//2), output_size=1):
+        super(TwoLayerSigmoidRegressor, self).__init__()
+        self.hidden1 = nn.Linear(input_size, hidden_size[0])  # hidden layer
+        self.hidden2 = nn.Linear(hidden_size[0], hidden_size[1])
+        self.output = nn.Linear(hidden_size[1], output_size)  # output layer
+
+    def forward(self, x):
+        x = torch.sigmoid(self.hidden1(x))
+        x = torch.sigmoid(self.hidden2(x))
+        x = F.relu(self.output(x))  # linear output
+        return x
