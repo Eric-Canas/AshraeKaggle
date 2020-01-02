@@ -8,12 +8,12 @@ from torch import nn
 from torch import optim
 import numpy as np
 from tensorboardX import SummaryWriter
-from NetworkUtils import save_model, load_model, pearson_correlation
+from NetworkUtils import save_model, load_model, pearson_correlation, pearsons_of_each_variable, RMSLELoss
 from torch.utils.data import DataLoader
 import time
 import os
 
-def train_step(model, data, epoch, criterion, optimizer, device = 'cuda:0', verbose = False, writer=None, verbose_each=200):
+def train_step(model, data, epoch, criterion, optimizer, device = 'cuda:0', verbose = False, writer=None, verbose_each=2000):
     model.train()
     losses = []
     pearsons = []
@@ -22,29 +22,35 @@ def train_step(model, data, epoch, criterion, optimizer, device = 'cuda:0', verb
     for i, (x,y) in enumerate(data):
         x = x.to(device)
         y = y.to(device)
-        # print(i_batch)
         output = model(x)[...,0]
         loss = criterion(output, y)
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
         losses.append(loss.item())
-        pearson = pearson_correlation(x=y, y=output).item()
+        pearson = pearson_correlation(x=output, y=y).item()
         pearsons.append(pearson)
         if verbose and i % verbose_each == 0:
             this_batch_time = time.time()-batch_time
             percent_done = i/datalen
             remaining_time = (this_batch_time*(datalen/verbose_each))*(1-percent_done)
-            batch_time = time.time()
-            print('Train -> Batch {0}/{1} ({2}%) of epoch {3}. Loss: {4}, Pearson: {5} --> Remaining Time: {6}:{7}'.
-                  format(i,datalen, int((percent_done)*100), epoch, loss.item(), np.round(pearson,6),
+            sample_id = np.random.randint(0, 30)
+            sample_id_2 = np.random.randint(30, 60)
+            sample_id_3 = np.random.randint(60, 90)
+            print('Train -> Batch {0}/{1} ({2}%) of epoch {3}. Loss: {4}, Pearson: {5}, STD: {6}, Samples: {7}/{8} - {9}/{10} - {11}/{12} --> Remaining Time: {13}:{14}'.
+                  format(i,datalen, int((percent_done)*100), epoch, np.round(loss.item(),3), np.round(pearson,3),
+                         np.round(torch.std(output).item(),2), np.round(output[sample_id].item(),2),
+                         np.round(y[sample_id].item(),2),np.round(output[sample_id_2].item(),2),
+                         np.round(y[sample_id_2].item(),2),np.round(output[sample_id_3].item(),2),
+                         np.round(y[sample_id_3].item(),2),
                          int(remaining_time/60),int(remaining_time)%60))
+            batch_time = time.time()
     mean_losses = np.mean(np.array(losses))
     mean_pearsons = np.mean(np.array(pearsons))
     if writer is not None:
         writer.add_scalar('Train-Loss', mean_losses, epoch)
         writer.add_scalar('Train-Pearson', mean_pearsons, epoch)
-    print('TRAIN -> EPOCH {0}, MEAN LOSS: {1}, MEAN PEARSON: {2}'.format(epoch, mean_losses, mean_pearsons))
+    print('TRAIN -> EPOCH {0}, MEAN LOSS: {1}, MEAN PEARSON: {2}'.format(epoch, np.round(mean_losses,4), np.round(mean_pearsons,3)))
 
 def validation_step(model, data, epoch, criterion, device = 'cuda:0', writer=None):
     model.eval()
@@ -64,7 +70,9 @@ def validation_step(model, data, epoch, criterion, device = 'cuda:0', writer=Non
     if writer is not None:
         writer.add_scalar('Validation-Loss', mean_loss, epoch)
         writer.add_scalar('Validation-Pearson', mean_pearson, epoch)
-    print('VALIDATION -> EPOCH {0}, MEAN LOSS {1}, STD LOSS {2}, MEAN PEARSON {3}'.format(epoch, mean_loss, np.std(np.array(losses)), mean_pearson))
+    print('VALIDATION -> EPOCH {0}, MEAN LOSS {1}, STD LOSS {2}, MEAN PEARSON {3}'.format(epoch, np.round(mean_loss,4),
+                                                                                np.round(np.std(np.array(losses)),3),
+                                                                                np.round(mean_pearson,3)))
 
 def get_predictions(model, data, batch_size, device = 'cuda:0', verbose=True, verbose_each=200):
     model.eval()
@@ -81,14 +89,14 @@ def get_predictions(model, data, batch_size, device = 'cuda:0', verbose=True, ve
                 this_batch_time = time.time() - batch_time
                 percent_done = i / datalen
                 remaining_time = (this_batch_time * (datalen / verbose_each)) * (1 - percent_done)
-                batch_time = time.time()
                 print('Producing Output -> Batch {0}/{1} ({2}%) --> Remaining Time: {3}:{4}'.
                       format(i, datalen, int((percent_done) * 100),
                              int(remaining_time / 60), int(remaining_time) % 60))
+                batch_time = time.time()
     return output_tensor.detach().cpu().numpy()
 
-def train(lr=0.5,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileName',
-                 charge=None, save = True, batch_size = 20000, epochs_for_saving=5):
+def train(lr=0.01,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileName',
+                 charge=None, save = True, batch_size = 256, epochs_for_saving=1):
 
     #Stablishing the device
     device = 'cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu'
@@ -96,18 +104,19 @@ def train(lr=0.5,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileNa
         warnings.warn(message="Executing on CPU!", category=ResourceWarning)
 
     #Generating the model
-    model = models.OneLayerRegressor()
+    #model = models.OneLayerRegressor()
+    model = models.FourLayerSigmoidRegressor()
     if charge is not None:
-        model = load_model(model=model,file_name=file_name)
+        model = load_model(model=model,file_name=charge)
     model = model.to(device)
 
     #Training Parameters
-    criterion = nn.MSELoss()
+    criterion = RMSLELoss()#nn.MSELoss()#nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=lr)  # optim.SGD(model.parameters(), lr=lr, momentum=momentum)
 
     #Generating the Dataset
-    dataset = ASHRAEDataset()
-    train_len, validation_len = int(math.ceil(0.96 * len(dataset))), int(math.ceil(0.03 * len(dataset)))
+    dataset = ASHRAEDataset(erase_nans=False)
+    train_len, validation_len = int(math.ceil(0.95 * len(dataset))), int(math.ceil(0.04 * len(dataset)))
     train, validation, test = data.random_split(dataset, (train_len,
                                                           validation_len,
                                                           len(dataset)-train_len-validation_len))
@@ -115,11 +124,16 @@ def train(lr=0.5,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileNa
     train = DataLoader(train, batch_size=batch_size, shuffle=True, num_workers=1, pin_memory=True)
     validation = DataLoader(validation, batch_size=batch_size, shuffle=True, num_workers=1, pin_memory=True)
 
+    #Uncomment for seeing pearson correlations
+    #pearsons_of_each_variable(data=train)
+
     #Writer for plotting graphic in tensorboard
     writer = SummaryWriter(comment=file_name)
     print('Starting the training...')
     print("Batch Size: " + str(batch_size))
     print("Running in: " + device)
+
+
 
     for i in range(epochs):
         train_step(model=model, data=train, criterion=criterion, optimizer=optimizer, epoch=i, device=device,
@@ -132,14 +146,15 @@ def train(lr=0.5,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileNa
             model = model.to(device)
     writer.close()
 
-def produce_test_output(model_to_charge, gpu = 0, batch_size=20000):
+def produce_test_output(model_to_charge, gpu = 0, batch_size=2000):
     # Stablishing the device
     device = 'cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu'
     if device == 'cpu':
         warnings.warn(message="Executing on CPU!", category=ResourceWarning)
 
     # Charging the model
-    model = models.OneLayerRegressor()
+    #model = models.OneLayerRegressor()
+    model=models.FiveLayerLinearRegressor()
     model = load_model(model=model, file_name=model_to_charge)
     model = model.to(device)
 
@@ -160,5 +175,5 @@ def produce_test_output(model_to_charge, gpu = 0, batch_size=20000):
     predictions[...,1] = predictions_without_id
 
     np.savetxt('./Submisions/submision_'+model_to_charge[:-len('.pth')]+'.csv',predictions,delimiter=',',
-               fmt=['%u','%1.4f'],header='row_id, meter_reading')
+               fmt=['%u','%1.4f'],header='row_id,meter_reading')
 
