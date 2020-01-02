@@ -96,7 +96,7 @@ def get_predictions(model, data, batch_size, device = 'cuda:0', verbose=True, ve
     return output_tensor.detach().cpu().numpy()
 
 def train(lr=0.01,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileName',
-                 charge=None, save = True, batch_size = 256, epochs_for_saving=1):
+                 charge=None, save = True, batch_size = 128, epochs_for_saving=1):
 
     #Stablishing the device
     device = 'cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu'
