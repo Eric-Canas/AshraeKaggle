@@ -170,3 +170,47 @@ class TwoLayerSigmoidRegressor(nn.Module):
         x = torch.sigmoid(self.hidden2(x))
         x = F.relu(self.output(x))  # linear output
         return x
+
+class OneLayerSigmoidRegressor(nn.Module):
+    def __init__(self, input_size=INPUT_LEN, hidden_size=INPUT_LEN*2, output_size=1):
+        super(OneLayerSigmoidRegressor, self).__init__()
+        self.hidden1 = nn.Linear(input_size, hidden_size)  # hidden layer
+        self.output = nn.Linear(hidden_size, output_size)  # output layer
+
+    def forward(self, x):
+        x = torch.sigmoid(self.hidden1(x))  # activation function for hidden layer
+        x = F.relu(self.output(x))  # linear output
+        return x
+
+
+class ThreeLayerMixRegressorSRR(nn.Module):
+    def __init__(self, input_size=INPUT_LEN,
+                 hidden_size=(INPUT_LEN*2, INPUT_LEN, INPUT_LEN//2), output_size=1):
+        super(ThreeLayerMixRegressorSRR, self).__init__()
+        self.hidden1 = nn.Linear(input_size, hidden_size[0])  # hidden layer
+        self.hidden2 = nn.Linear(hidden_size[0], hidden_size[1])
+        self.hidden3 = nn.Linear(hidden_size[1], hidden_size[2])
+        self.output = nn.Linear(hidden_size[2], output_size)  # output layer
+
+    def forward(self, x):
+        x = torch.sigmoid(self.hidden1(x))
+        x = F.relu(self.hidden2(x))
+        x = F.relu(self.hidden3(x))
+        x = F.relu(self.output(x))  # linear output
+        return x
+
+class ThreeLayerMixRegressorRSR(nn.Module):
+    def __init__(self, input_size=INPUT_LEN,
+                 hidden_size=(INPUT_LEN*2, INPUT_LEN, INPUT_LEN//2), output_size=1):
+        super(ThreeLayerMixRegressorRSR, self).__init__()
+        self.hidden1 = nn.Linear(input_size, hidden_size[0])  # hidden layer
+        self.hidden2 = nn.Linear(hidden_size[0], hidden_size[1])
+        self.hidden3 = nn.Linear(hidden_size[1], hidden_size[2])
+        self.output = nn.Linear(hidden_size[2], output_size)  # output layer
+
+    def forward(self, x):
+        x = F.relu(self.hidden1(x))
+        x = torch.sigmoid(self.hidden2(x))
+        x = F.relu(self.hidden3(x))
+        x = F.relu(self.output(x))  # linear output
+        return x

@@ -96,7 +96,7 @@ def get_predictions(model, data, batch_size, device = 'cuda:0', verbose=True, ve
     return output_tensor.detach().cpu().numpy()
 
 def train(lr=0.01,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileName',
-                 charge=None, save = True, batch_size = 32, epochs_for_saving=3):
+                 charge=None, save = True, batch_size = 128, epochs_for_saving=3):
 
     #Stablishing the device
     device = 'cuda:' + str(gpu) if torch.cuda.is_available() else 'cpu'
@@ -105,7 +105,7 @@ def train(lr=0.01,momentum = 0.9, gpu = 0, epochs = 500, file_name='DefaultFileN
 
     #Generating the model
     #model = models.OneLayerRegressor()
-    model = models.TwoLayerSigmoidRegressor()
+    model = models.ThreeLayerMixRegressorRSR()
     if charge is not None:
         model = load_model(model=model,file_name=charge)
     model = model.to(device)
@@ -154,7 +154,7 @@ def produce_test_output(model_to_charge, gpu = 0, batch_size=2000):
 
     # Charging the model
     #model = models.OneLayerRegressor()
-    model=models.FiveLayerLinearRegressor()
+    model=models.FourLayerSigmoidRegressor()
     model = load_model(model=model, file_name=model_to_charge)
     model = model.to(device)
 
